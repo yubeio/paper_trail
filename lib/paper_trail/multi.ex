@@ -1,10 +1,8 @@
 defmodule PaperTrail.Multi do
   import Ecto.Changeset
-
   alias PaperTrail
   alias PaperTrail.Version
   alias PaperTrail.RepoClient
-
   defdelegate new(), to: Ecto.Multi
   defdelegate append(lhs, rhs), to: Ecto.Multi
   defdelegate error(multi, name, value), to: Ecto.Multi
@@ -15,9 +13,19 @@ defmodule PaperTrail.Multi do
   defdelegate run(multi, name, mod, fun, args), to: Ecto.Multi
   defdelegate to_list(multi), to: Ecto.Multi
 
-  def insert(%Ecto.Multi{} = multi, changeset, options \\ [
-    origin: nil, meta: nil, originator: nil, prefix: nil, model_key: :model, version_key: :version
-  ]) do
+  def insert(
+        %Ecto.Multi{} = multi,
+        changeset,
+        options \\ [
+          origin: nil,
+          meta: nil,
+          originator: nil,
+          prefix: nil,
+          model_key: :model,
+          version_key: :version,
+          serializer_callback: nil
+        ]
+      ) do
     model_key = options[:model_key] || :model
     version_key = options[:version_key] || :version
 
@@ -48,9 +56,9 @@ defmodule PaperTrail.Multi do
 
           repo.insert(updated_changeset)
         end)
-        |> Ecto.Multi.run(version_key, fn repo, %{initial_version: initial_version, model: model} ->
+        |> Ecto.Multi.run(version_key, fn repo,
+                                          %{initial_version: initial_version, model: model} ->
           target_version = make_version_struct(%{event: "insert"}, model, options) |> serialize()
-
           Version.changeset(initial_version, target_version) |> repo.update
         end)
 
@@ -146,7 +154,7 @@ defmodule PaperTrail.Multi do
     end
   end
 
-  defp make_version_struct(%{event: "insert"}, model, options) do
+  defp make_version_struct(%{event: "insert"} = match, model, options) do
     originator = PaperTrail.RepoClient.originator()
     originator_ref = options[originator[:name]] || options[:originator]
 
@@ -164,9 +172,10 @@ defmodule PaperTrail.Multi do
       meta: options[:meta]
     }
     |> add_prefix(options[:prefix])
+    |> call_serialier_callback(match, model, options)
   end
 
-  defp make_version_struct(%{event: "update"}, changeset, options) do
+  defp make_version_struct(%{event: "update"} = match, changeset, options) do
     originator = PaperTrail.RepoClient.originator()
     originator_ref = options[originator[:name]] || options[:originator]
 
@@ -184,9 +193,10 @@ defmodule PaperTrail.Multi do
       meta: options[:meta]
     }
     |> add_prefix(options[:prefix])
+    |> call_serialier_callback(match, changeset, options)
   end
 
-  defp make_version_struct(%{event: "delete"}, model_or_changeset, options) do
+  defp make_version_struct(%{event: "delete"} = match, model_or_changeset, options) do
     originator = PaperTrail.RepoClient.originator()
     originator_ref = options[originator[:name]] || options[:originator]
 
@@ -204,6 +214,16 @@ defmodule PaperTrail.Multi do
       meta: options[:meta]
     }
     |> add_prefix(options[:prefix])
+    |> call_serialier_callback(match, model_or_changeset, options)
+  end
+
+  defp call_serialier_callback(version, match, model_or_changeset, options) do
+    serializer_callback = options[:serializer_callback] || (&default_callback/4)
+    serializer_callback.(version, match, model_or_changeset, options)
+  end
+
+  defp default_callback(version, _match, _model_or_changeset, _options) do
+    version
   end
 
   defp get_sequence_from_model(changeset) do
@@ -231,10 +251,8 @@ defmodule PaperTrail.Multi do
 
   defp add_prefix(changeset, nil), do: changeset
   defp add_prefix(changeset, prefix), do: Ecto.put_meta(changeset, prefix: prefix)
-
   defp get_item_type(%Ecto.Changeset{data: data}), do: get_item_type(data)
   defp get_item_type(model), do: model.__struct__ |> Module.split() |> List.last()
-
   defp get_model_id(%Ecto.Changeset{data: data}), do: get_model_id(data)
 
   defp get_model_id(model) do
