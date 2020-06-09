@@ -184,6 +184,7 @@ defmodule PaperTrail.Multi do
       item_type: get_item_type(changeset),
       item_id: get_model_id(changeset),
       item_changes: changeset.changes,
+      item_old: serialize(changeset.data),
       originator_id:
         case originator_ref do
           nil -> nil
