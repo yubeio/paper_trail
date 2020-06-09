@@ -13,6 +13,7 @@ defmodule PaperTrail.Version do
     field(:item_type, :string)
     field(:item_id, Application.get_env(:paper_trail, :item_type, :integer))
     field(:item_changes, :map)
+    field(:item_old, :map)
     field(:originator_id, Application.get_env(:paper_trail, :originator_type, :integer))
 
     field(:origin, :string,
@@ -34,10 +35,12 @@ defmodule PaperTrail.Version do
     timestamps(updated_at: false)
   end
 
+  @required_fields ~w(event item_type item_id item_changes)a
+  @all_fields ~w(item_type item_id item_changes item_old origin originator_id meta)a
   def changeset(model, params \\ :empty) do
     model
-    |> cast(params, [:item_type, :item_id, :item_changes, :origin, :originator_id, :meta])
-    |> validate_required([:event, :item_type, :item_id, :item_changes])
+    |> cast(params, @all_fields)
+    |> validate_required(@required_fields)
   end
 
   @doc """
