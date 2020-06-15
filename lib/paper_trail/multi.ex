@@ -178,12 +178,18 @@ defmodule PaperTrail.Multi do
   defp make_version_struct(%{event: "update"} = match, changeset, options) do
     originator = PaperTrail.RepoClient.originator()
     originator_ref = options[originator[:name]] || options[:originator]
+    changed_keys = Map.keys(changeset.changes)
+
+    item_old =
+      Enum.filter(changeset.data, fn {key, _} -> key in changed_keys end)
+      |> Enum.into(%{})
 
     %Version{
       event: "update",
       item_type: get_item_type(changeset),
       item_id: get_model_id(changeset),
       item_changes: changeset.changes,
+      item_old: item_old,
       originator_id:
         case originator_ref do
           nil -> nil
